@@ -1,0 +1,88 @@
+# --- Secrets / env ---
+.env
+.env.*
+!.env.example
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+.env/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+pip-wheel-metadata/
+share/python-wheels/
+*.manifest
+*.spec
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+.hypothesis/
+*.cover
+.dmypy.json
+dmypy.json
+
+# --- Local runtime data (keep directory placeholders) ---
+memory/*
+!memory/.gitkeep
+experiments/*
+!experiments/.gitkeep
+tasks/*
+!tasks/.gitkeep
+
+# MLflow / tracking (optional extension)
+mlruns/
+.mlflow/
+mlflow.db
+
+# --- Frontend (app/) ---
+app/node_modules/
+app/dist/
+app/dist-ssr/
+app/*.local
+app/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Logs / temp ---
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*~
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+!.vscode/extensions.json
+*.code-workspace
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# --- Cursor / local agent noise (optional local) ---
+.cursor/

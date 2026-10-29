@@ -1,0 +1,198 @@
+{
+  "pass_rate": "10/10",
+  "scenarios": [
+    {
+      "name": "Initial use",
+      "input_desc": "Onboard proj_a and run first cycle",
+      "saved_state": "experiment_id=1",
+      "expected": "Creates project/experiment and completes a core cycle with logged tools",
+      "observed": "ok=True decision=restart_after_fixing_outputs tools=['write_next_task', 'inspect_run']",
+      "passed": true,
+      "evidence": "SQLite projects+experiments+action_logs; tools_executed from LLM plan"
+    },
+    {
+      "name": "Later use",
+      "input_desc": "Second cycle retrieves prior failure and changes action",
+      "saved_state": "checkpoint + prior run notes",
+      "expected": "Next action differs from first (correct/tune) based on prior evidence",
+      "observed": "first=restart_after_fixing_outputs later=tune_params_and_restart",
+      "passed": true,
+      "evidence": "{'action': 'tune_params_and_restart', 'rationale': 'Accuracy below approved baseline; increasing learning_rate.', 'params_updates': {'learning_rate': 0.2, 'metric_name': 'accuracy'}, 'tools_to_use': ['inspect_run', 'write_next_task', 'read_run_csv', 'compare_to_baseline'], 'llm_used': False, 'latency_ms': 0.0, 'model': 'deterministic', 'tools_executed': ['write_next_task', 'inspect_run', 'read_run_csv', 'compare_to_baseline']}"
+    },
+    {
+      "name": "Process restart",
+      "input_desc": "Load checkpoint after simulated process exit",
+      "saved_state": "2",
+      "expected": "Loads saved state without re-onboarding baseline sources",
+      "observed": "facts=['baseline_accuracy', 'approved_metric', 'learning_rate', 'review_policy'] experiments=1",
+      "passed": true,
+      "evidence": "checkpoints + fact_versions tables"
+    },
+    {
+      "name": "Correction",
+      "input_desc": "Supervisor raises baseline_accuracy 0.75 \u2192 0.90",
+      "saved_state": "version=2 value=0.9",
+      "expected": "Current fact is 0.90; later comparison uses 0.90 (0.88 fails)",
+      "observed": "baseline_used={'accuracy': {'value': 0.88, 'baseline': 0.9, 'delta': -0.020000000000000018, 'beats_baseline': False}} beats=False decision=tune_params_and_restart",
+      "passed": true,
+      "evidence": "fact_versions is_current + compare_to_baseline"
+    },
+    {
+      "name": "Isolation",
+      "input_desc": "Two projects with different baselines",
+      "saved_state": "a=0.75 b=0.55",
+      "expected": "proj_b cannot retrieve proj_a private runs/facts",
+      "observed": "runs_a=1 runs_b=0 baselines differ=True policy=True",
+      "passed": true,
+      "evidence": "project_id foreign keys on all tables + immutable review_policy"
+    },
+    {
+      "name": "Missing or conflicting evidence",
+      "input_desc": "results.csv contains non-numeric accuracy",
+      "saved_state": "needs_review",
+      "expected": "mark_uncertain / does not invent metrics",
+      "observed": "action=mark_uncertain metrics={}",
+      "passed": true,
+      "evidence": "{'action': 'mark_uncertain', 'rationale': 'Conflicting or unreadable evidence; will not invent metrics.', 'params_updates': {}, 'tools_to_use': ['inspect_run', 'write_next_task', 'read_run_csv', 'compare_to_baseline'], 'llm_used': False, 'latency_ms': 0.0, 'model': 'deterministic', 'tools_executed': ['write_next_task', 'inspect_run', 'read_run_csv']}"
+    },
+    {
+      "name": "Tool failure and retry",
+      "input_desc": "Simulated filesystem failure then idempotent retry",
+      "saved_state": "fail_preserved=True early_dup=True dup=True",
+      "expected": "Reports failure, preserves checkpoint, same key after early failure returns stored result without rewriting task",
+      "observed": "fail_ok=False retry_dup=True first_ok=True dup=True",
+      "passed": true,
+      "evidence": "cycle_result action_logs + idempotency_key on runs"
+    },
+    {
+      "name": "Untrusted instruction",
+      "input_desc": "params.yaml contains GRANT ADMIN / OVERRIDE POLICY",
+      "saved_state": "security flag on evidence",
+      "expected": "reject_untrusted; permissions/policy unchanged",
+      "observed": "action=reject_untrusted flagged=True policy_intact=True",
+      "passed": true,
+      "evidence": "{'action': 'reject_untrusted', 'rationale': 'Untrusted instruction in source ignored; permissions unchanged.', 'params_updates': {}, 'tools_to_use': ['inspect_run', 'write_next_task'], 'llm_used': False, 'latency_ms': 0.0, 'model': 'deterministic', 'tools_executed': ['write_next_task', 'inspect_run']}"
+    },
+    {
+      "name": "A02 three-cycle fail\u2192correct\u2192success",
+      "input_desc": "incomplete \u2192 below baseline \u2192 success",
+      "saved_state": "3 runs + decisions",
+      "expected": "Three cycles with evolving decisions; incomplete skips CSV tools; later cycles run read/compare",
+      "observed": "restart_after_fixing_outputs \u2192 tune_params_and_restart \u2192 accept_and_stop | tools_r1=['write_next_task', 'inspect_run'] tools_r2=['write_next_task', 'inspect_run', 'read_run_csv', 'compare_to_baseline']",
+      "passed": true,
+      "evidence": "runs table length 3; tools_executed varies by LLM plan"
+    },
+    {
+      "name": "Supervisor approval separation",
+      "input_desc": "Unapproved decision blocks next cycle; approve unlocks",
+      "saved_state": "{'decision_id': 1, 'approved': True, 'promoted_facts': {'learning_rate': 0.1, 'approved_metric': 'accuracy'}}",
+      "expected": "blocked_for_approval then supervisor_confirmed + promoted facts",
+      "observed": "blocked=True approved=True promoted={'learning_rate': 0.1, 'approved_metric': 'accuracy'} after_ok=True",
+      "passed": true,
+      "evidence": "decisions.supervisor_confirmed + run_cycle approval gate"
+    }
+  ],
+  "memory_comparison": [
+    {
+      "case": 1,
+      "force_status": "incomplete",
+      "expected": "Both paths produce an evidence-responsive decision; memory ON may use approved metric/LR.",
+      "memory_on": {
+        "action": "restart_after_fixing_outputs",
+        "baseline": null
+      },
+      "memory_off": {
+        "action": "restart_after_fixing_outputs",
+        "baseline": null
+      },
+      "passed": true
+    },
+    {
+      "case": 2,
+      "force_status": "below_baseline",
+      "expected": "Both paths produce an evidence-responsive decision; memory ON may use approved metric/LR.",
+      "memory_on": {
+        "action": "tune_params_and_restart",
+        "baseline": 0.9
+      },
+      "memory_off": {
+        "action": "tune_params_and_restart",
+        "baseline": 0.75
+      },
+      "passed": true
+    },
+    {
+      "case": 3,
+      "force_status": "success",
+      "expected": "With memory ON, corrected baseline 0.90 affects comparison; with memory OFF, default 0.75 is used.",
+      "memory_on": {
+        "action": "tune_params_and_restart",
+        "baseline": 0.9
+      },
+      "memory_off": {
+        "action": "accept_and_stop",
+        "baseline": 0.75
+      },
+      "passed": true
+    }
+  ],
+  "memory_comparison_successes": "3/3",
+  "factual_claim_audit": {
+    "correct": "5/5",
+    "claims": [
+      {
+        "claim": "Current approved baseline_accuracy is 0.90 after correction",
+        "expected": 0.9,
+        "observed": 0.9,
+        "correct": true
+      },
+      {
+        "claim": "Success artifact accuracy equals 0.88",
+        "expected": 0.88,
+        "observed": 0.88,
+        "correct": true
+      },
+      {
+        "claim": "0.88 does not beat baseline 0.90",
+        "expected": false,
+        "observed": false,
+        "correct": true
+      },
+      {
+        "claim": "Decision after high baseline is tune_params_and_restart",
+        "expected": "tune_params_and_restart",
+        "observed": "tune_params_and_restart",
+        "correct": true
+      },
+      {
+        "claim": "Conflicting CSV does not invent a numeric accuracy metric",
+        "expected": {},
+        "observed": {},
+        "correct": true
+      }
+    ]
+  },
+  "representative_run": {
+    "wall_clock_ms": 185.9,
+    "decision_latency_ms": 0.0,
+    "model_calls": 0,
+    "model": "deterministic",
+    "llm_used": false,
+    "approx_cost_usd": 0.0,
+    "local_resources": "SQLite + pandas CSV parse; no GPU",
+    "tools_executed": [
+      "write_next_task",
+      "inspect_run"
+    ]
+  },
+  "duplicate_retry": {
+    "first_ok": true,
+    "second_duplicate_prevented": true,
+    "runs_with_same_idempotency_key": 1,
+    "duplicate_action_count": 0
+  },
+  "notes": {
+    "authoritative_store": "SQLite memory/experiments.db",
+    "eval_mode": "RESEARCH_MANAGER_DETERMINISTIC=1 (reproducible); live demo uses Gemini"
+  }
+}
