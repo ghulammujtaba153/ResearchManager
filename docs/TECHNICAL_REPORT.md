@@ -82,6 +82,7 @@ Deterministic code validates numbers, redacts untrusted markers, and performs st
 |---|---|---|
 | `inspect_run` | Local evidence read | Lists present/missing artifacts; flags untrusted text |
 | `read_run_csv` | Local evidence read | Parses required metric; marks uncertain on bad values |
+| `read_run_logs` | Diagnostics & telemetry | Analyzes `train.log` stdout/stderr; detects OOM, NaN loss, or crash traces |
 | `write_next_task` | Persistent controlled write | Writes next experiment task YAML |
 | `compare_to_baseline` | Deterministic calc | Delta vs approved baseline (not LLM math) |
 
@@ -121,7 +122,7 @@ Experiment folders and CSVs support retrieval. They do **not** alone prove the a
 - **Idempotency keys** on runs and `cycle_result:{key}` logs: retries after mid-cycle failure return the stored outcome without rewriting the task file.
 - **Tool failure path:** simulated filesystem failure preserves checkpoint and returns an error without inventing success.
 - **Untrusted content:** markers such as `GRANT ADMIN` / `OVERRIDE POLICY` in YAML/CSV are flagged; action `reject_untrusted` leaves permissions unchanged. Planted text cannot mutate immutable `review_policy`.
-- **Approvals:** unapproved `needs_review` / `iterating` decisions **block** the next `run_cycle` until approve/reject (UI banner + API). Eval/demo may pass `skip_approval_gate` or auto-approve between cycles.
+- **Approvals & Collaborative Steering:** unapproved `needs_review` / `iterating` decisions **block** the next `run_cycle` until supervisor action. Supervisors can approve as-is or approve with parameter overrides (`override_params`); rejected decisions pass supervisor guidance comments directly into the next cycle prompt and hypothesis to steer the agent collaboratively. Eval/demo may pass `skip_approval_gate` or auto-approve between cycles.
 
 ---
 
@@ -163,16 +164,19 @@ See generated `evaluation/scenario_results.json` fields:
 
 ## 8. Usability and demonstration
 
-**UI** shows current state, recommended next action, supporting evidence, approval gate banner, correction, resume, action log / runs / decisions / **fact history** tabs, and LLM tool chips (`tools_to_use` vs `tools_executed`).  
-**API** also exposes `GET /api/facts?project_id=` (current + history).  
-**CLI** mirrors onboard / cycle / resume / correct / demo.  
-**Demo script (8–10 min):** see `docs/DEMO_SCRIPT.md` — onboard → cycle → gate → resume → correct → approve → later cycle → inspect log / fact history.
+**UI** shows current state, recommended next action, supporting evidence, approval gate banner, pending params vs approved facts, fact version bump (`v1 superseded → v2 current`), resume toast (checkpoint id), action log / runs / decisions / **fact history** tabs, LLM tool chips, and **LLM proposed vs Guard**. Toolbar: **Run cycle offline** vs **Run cycle with Gemini** (per-request `deterministic`). **Viva panel** one-click paths: untrusted, conflicting CSV, tool-failure retry, memory off vs on.
+
+**API:** `POST /api/cycle` accepts `deterministic`, `plant_untrusted`, `force_sim_status`, `simulate_tool_failure`, `use_memory`, `skip_approval_gate` (defaults off). `GET /api/facts?project_id=` returns current + history.
+
+**CLI** mirrors onboard / cycle / resume / correct / demo.
+
+**What to click in viva:** onboard → run cycle offline (`tools_executed`) → run cycle with Gemini (`llm_used` / guard) → approve (gate) → resume (`checkpoints`) → correct baseline (`fact_versions`) → viva panel (untrusted or retry) → action log. Full script: `docs/DEMO_SCRIPT.md`.
 
 ---
 
-## 9. Limitations
+## 9. Limitations & Execution Modes
 
-1. Training is **simulated** (artifact dropper) so demos stay reproducible without GPUs.
+1. **Dual Execution Modes:** Supports both **Simulated mode** (artifact dropper for reproducible, zero-GPU CI and viva grading) and a **Live Subprocess Runner** (`src/research_manager/runners/train_model.py`) that executes real ML gradient descent, streams `train.log`, and performs automated failure diagnostics (`read_run_logs`).
 2. If Gemini is unavailable, evidence-responsive **deterministic fallback** still selects actions; viva should show at least one live LLM decision when the key works.
 3. Source knowledge is local folders, not remote GitHub/PDF pipelines (optional for other catalogue ideas).
 4. MLflow tracking is an optional extension, not required for the minimum mark.
@@ -187,7 +191,7 @@ See generated `evaluation/scenario_results.json` fields:
 | Single coordinator | Shared project memory; fewer conflicting agent copies |
 | Idempotent retries + early `cycle_result` | Safe retry even when failure happens before a Run row exists |
 | Separate supervisor fields + approve gate | Human judgment required before the next cycle; facts promote on approve |
-| LLM selects tools; code validates | Inspectable tool decisions without letting the model invent metrics |
+| Assertive guard invariants | LLM autonomously chooses tools and actions; invariant guards veto only when safety or truthfulness contracts are violated |
 | Gemini + fallback | Meets LLM requirement while keeping offline eval stable |
 
 ### Disclosure

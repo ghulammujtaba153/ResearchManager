@@ -9,6 +9,8 @@ from typing import Any
 import pandas as pd
 import yaml
 
+from research_manager.tools.diagnostics import read_run_logs
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 EXPERIMENTS_DIR = PROJECT_ROOT / "experiments"
 TASKS_DIR = PROJECT_ROOT / "tasks"
@@ -108,7 +110,15 @@ def read_run_csv(
     metrics: dict[str, Any] = {}
     if not missing_columns and len(df) > 0:
         try:
-            metrics = {required_metric: float(df[required_metric].iloc[-1])}
+            for column in df.columns:
+                try:
+                    value = float(df[column].iloc[-1])
+                except (TypeError, ValueError):
+                    continue
+                if pd.notna(value):
+                    metrics[str(column)] = value
+            if required_metric not in metrics:
+                raise ValueError(f"Non-numeric value for {required_metric}")
         except (TypeError, ValueError):
             return {
                 "ok": False,
@@ -133,6 +143,8 @@ def read_run_csv(
 def compare_to_baseline(metrics: dict[str, float], baseline: dict[str, float]) -> dict[str, Any]:
     comparison: dict[str, Any] = {}
     for name, value in metrics.items():
+        if name not in baseline:
+            continue
         base = baseline.get(name)
         comparison[name] = {
             "value": value,

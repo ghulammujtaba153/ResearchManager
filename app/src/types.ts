@@ -20,6 +20,7 @@ export type EvidenceItem = {
   metrics: Record<string, number>
   notes: string
   success: boolean
+  missing_files?: string[]
 }
 
 export type RunRecord = {
@@ -52,6 +53,7 @@ export type ActionLogItem = {
   outcome: string
   error: string
   created_at: string | null
+  input?: Record<string, unknown>
   output?: Record<string, unknown>
 }
 
@@ -63,6 +65,13 @@ export type LastDecision = {
   latency_ms?: number
   tools_to_use?: string[]
   tools_executed?: string[]
+  llm_proposed?: {
+    action?: string
+    rationale?: string
+    tools_to_use?: string[]
+  }
+  guard_overrode?: boolean
+  guard_reason?: string
   created_at?: string | null
 }
 
@@ -87,6 +96,15 @@ export type AgentSnapshot = {
     params: Record<string, unknown>
   }
   facts?: Record<string, unknown>
+  pending_params?: Record<string, unknown>
+  fact_bump?: {
+    fact_key: string
+    current_version: number
+    current_value: unknown
+    previous_version: number | null
+    previous_value: unknown
+    approved_by?: string
+  } | null
   fact_history?: FactHistoryRow[]
   approval_required?: boolean
   checkpoint?: { checkpoint_id: number; created_at: string | null } | null
@@ -106,4 +124,16 @@ export type AgentSnapshot = {
   decisions: DecisionRecord[]
   evidence: EvidenceItem[]
   action_log?: ActionLogItem[]
+}
+
+export type StoreSnapshot = {
+  database: string
+  project: { id: string; name: string; owner: string; created_at: string | null }
+  counts: Record<string, number>
+  experiments: Array<Record<string, unknown>>
+  runs: Array<Record<string, unknown>>
+  decisions: Array<Record<string, unknown>>
+  facts: Array<Record<string, unknown>>
+  checkpoints: Array<Record<string, unknown>>
+  action_logs: Array<Record<string, unknown>>
 }

@@ -86,3 +86,5 @@ ehthumbs.db
 
 # --- Cursor / local agent noise (optional local) ---
 .cursor/
+.neon
+node_modules/

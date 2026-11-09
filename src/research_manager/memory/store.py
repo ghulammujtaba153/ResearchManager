@@ -336,14 +336,16 @@ def latest_pending_decision(session: Session, project_id: str) -> Decision | Non
     )
 
 
-def list_project_runs(session: Session, project_id: str, limit: int = 20) -> list[Run]:
-    return (
-        session.query(Run)
-        .filter_by(project_id=project_id)
-        .order_by(Run.id.desc())
-        .limit(limit)
-        .all()
-    )
+def list_project_runs(
+    session: Session,
+    project_id: str,
+    limit: int = 20,
+    experiment_id: int | None = None,
+) -> list[Run]:
+    query = session.query(Run).filter_by(project_id=project_id)
+    if experiment_id is not None:
+        query = query.filter_by(experiment_id=experiment_id)
+    return query.order_by(Run.id.desc()).limit(limit).all()
 
 
 def count_project_runs(session: Session, project_id: str) -> int:

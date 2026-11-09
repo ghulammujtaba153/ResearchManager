@@ -17,7 +17,7 @@
       "expected": "Next action differs from first (correct/tune) based on prior evidence",
       "observed": "first=restart_after_fixing_outputs later=tune_params_and_restart",
       "passed": true,
-      "evidence": "{'action': 'tune_params_and_restart', 'rationale': 'Accuracy below approved baseline; increasing learning_rate.', 'params_updates': {'learning_rate': 0.2, 'metric_name': 'accuracy'}, 'tools_to_use': ['inspect_run', 'write_next_task', 'read_run_csv', 'compare_to_baseline'], 'llm_used': False, 'latency_ms': 0.0, 'model': 'deterministic', 'tools_executed': ['write_next_task', 'inspect_run', 'read_run_csv', 'compare_to_baseline']}"
+      "evidence": "{'action': 'tune_params_and_restart', 'rationale': 'Accuracy below approved baseline; increasing learning_rate.', 'params_updates': {'learning_rate': 0.2, 'metric_name': 'accuracy'}, 'tools_to_use': ['inspect_run', 'write_next_task', 'read_run_csv', 'compare_to_baseline'], 'llm_used': False, 'latency_ms': 0.0, 'model': 'deterministic', 'guard_overrode': False, 'guard_reason': None, 'invariants_checked': ['INV_SECURITY', 'INV_COMPLETENESS', 'INV_EVIDENCE_INTEGRITY', 'INV_BASELINE_THRESHOLD', 'INV_VOCABULARY'], 'tools_executed': ['write_next_task', 'inspect_run', 'read_run_csv', 'compare_to_baseline'], 'llm_proposed': {'action': 'tune_params_and_restart', 'rationale': 'Accuracy below approved baseline; increasing learning_rate.', 'tools_to_use': ['inspect_run', 'write_next_task', 'read_run_csv', 'compare_to_baseline'], 'params_updates': {'learning_rate': 0.2, 'metric_name': 'accuracy'}}}"
     },
     {
       "name": "Process restart",
@@ -53,7 +53,7 @@
       "expected": "mark_uncertain / does not invent metrics",
       "observed": "action=mark_uncertain metrics={}",
       "passed": true,
-      "evidence": "{'action': 'mark_uncertain', 'rationale': 'Conflicting or unreadable evidence; will not invent metrics.', 'params_updates': {}, 'tools_to_use': ['inspect_run', 'write_next_task', 'read_run_csv', 'compare_to_baseline'], 'llm_used': False, 'latency_ms': 0.0, 'model': 'deterministic', 'tools_executed': ['write_next_task', 'inspect_run', 'read_run_csv']}"
+      "evidence": "{'action': 'mark_uncertain', 'rationale': 'Conflicting or unreadable evidence; will not invent metrics.', 'params_updates': {}, 'tools_to_use': ['inspect_run', 'write_next_task', 'read_run_csv', 'compare_to_baseline'], 'llm_used': False, 'latency_ms': 0.0, 'model': 'deterministic', 'guard_overrode': False, 'guard_reason': None, 'invariants_checked': ['INV_SECURITY', 'INV_COMPLETENESS', 'INV_EVIDENCE_INTEGRITY', 'INV_BASELINE_THRESHOLD', 'INV_VOCABULARY'], 'tools_executed': ['write_next_task', 'inspect_run', 'read_run_csv'], 'llm_proposed': {'action': 'mark_uncertain', 'rationale': 'Conflicting or unreadable evidence; will not invent metrics.', 'tools_to_use': ['inspect_run', 'write_next_task', 'read_run_csv', 'compare_to_baseline'], 'params_updates': {}}}"
     },
     {
       "name": "Tool failure and retry",
@@ -71,7 +71,7 @@
       "expected": "reject_untrusted; permissions/policy unchanged",
       "observed": "action=reject_untrusted flagged=True policy_intact=True",
       "passed": true,
-      "evidence": "{'action': 'reject_untrusted', 'rationale': 'Untrusted instruction in source ignored; permissions unchanged.', 'params_updates': {}, 'tools_to_use': ['inspect_run', 'write_next_task'], 'llm_used': False, 'latency_ms': 0.0, 'model': 'deterministic', 'tools_executed': ['write_next_task', 'inspect_run']}"
+      "evidence": "{'action': 'reject_untrusted', 'rationale': 'Untrusted instruction in source ignored; permissions unchanged.', 'params_updates': {}, 'tools_to_use': ['inspect_run', 'write_next_task'], 'llm_used': False, 'latency_ms': 0.0, 'model': 'deterministic', 'guard_overrode': True, 'guard_reason': 'untrusted', 'invariants_checked': ['INV_SECURITY'], 'tools_executed': ['write_next_task', 'inspect_run'], 'llm_proposed': {'action': 'reject_untrusted', 'rationale': 'Untrusted instruction in source ignored; permissions unchanged.', 'tools_to_use': ['inspect_run', 'write_next_task'], 'params_updates': {}}}"
     },
     {
       "name": "A02 three-cycle fail\u2192correct\u2192success",
@@ -85,7 +85,7 @@
     {
       "name": "Supervisor approval separation",
       "input_desc": "Unapproved decision blocks next cycle; approve unlocks",
-      "saved_state": "{'decision_id': 1, 'approved': True, 'promoted_facts': {'learning_rate': 0.1, 'approved_metric': 'accuracy'}}",
+      "saved_state": "{'decision_id': 1, 'approved': True, 'promoted_facts': {'learning_rate': 0.1, 'approved_metric': 'accuracy'}, 'overrides_applied': {}}",
       "expected": "blocked_for_approval then supervisor_confirmed + promoted facts",
       "observed": "blocked=True approved=True promoted={'learning_rate': 0.1, 'approved_metric': 'accuracy'} after_ok=True",
       "passed": true,
@@ -173,7 +173,7 @@
     ]
   },
   "representative_run": {
-    "wall_clock_ms": 185.9,
+    "wall_clock_ms": 150.6,
     "decision_latency_ms": 0.0,
     "model_calls": 0,
     "model": "deterministic",

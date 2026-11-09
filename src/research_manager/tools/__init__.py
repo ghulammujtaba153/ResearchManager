@@ -3,6 +3,7 @@ from research_manager.tools.evidence import (
     inspect_run,
     list_experiment_folders,
     read_run_csv,
+    read_run_logs,
     write_next_task,
 )
 
@@ -12,4 +13,5 @@ __all__ = [
     "read_run_csv",
     "compare_to_baseline",
     "write_next_task",
+    "read_run_logs",
 ]

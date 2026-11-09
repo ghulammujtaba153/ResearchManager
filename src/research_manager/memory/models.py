@@ -1,6 +1,6 @@
 """Persistent memory schema for Research Experiment Manager.
 
-Authoritative store: SQLite (memory/experiments.db).
+Authoritative store: SQL database (SQLite by default; PostgreSQL supported via configuration).
 Excel/CSV exports are review views only and must never overwrite supervisor decisions.
 """
 
@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -110,6 +111,16 @@ class FactVersion(Base):
     superseded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     project: Mapped[Project] = relationship(back_populates="facts")
+
+
+Index(
+    "uq_current_fact_per_project",
+    FactVersion.project_id,
+    FactVersion.fact_key,
+    unique=True,
+    sqlite_where=FactVersion.is_current.is_(True),
+    postgresql_where=FactVersion.is_current.is_(True),
+)
 
 
 class Checkpoint(Base):

@@ -16,6 +16,7 @@ from research_manager.agent.llm import (
 from research_manager.memory import store
 from research_manager.memory.db import init_db
 from research_manager.memory.models import Decision, Experiment, Run
+from research_manager.runners import local_runner
 from research_manager.simulator.fake_runs import simulate_from_task
 from research_manager.state import WorkingState
 from research_manager.tools import evidence as tools
@@ -72,6 +73,23 @@ def onboard_project(
     SessionLocal = init_db(db_path)
     with SessionLocal() as session:
         store.ensure_project(session, project_id, name=name or project_id)
+        existing = store.list_project_experiments(session, project_id)
+        if existing:
+            exp = existing[0]
+            store.log_action(
+                session,
+                project_id=project_id,
+                event_type="onboard_ignored",
+                tool_name="onboard_project",
+                output_data={"experiment_id": exp.id, "reason": "active experiment already exists"},
+                outcome="ok",
+            )
+            return {
+                "project_id": project_id,
+                "experiment_id": exp.id,
+                "reused": True,
+                "facts": store.get_current_facts(session, project_id),
+            }
         store.set_fact(
             session,
             project_id=project_id,
@@ -165,9 +183,11 @@ def run_cycle(
     simulate_tool_failure: bool = False,
     idempotency_key: str | None = None,
     skip_approval_gate: bool = False,
+    deterministic: bool | None = None,
+    runner_mode: str = "simulator",
     db_path=None,
 ) -> dict[str, Any]:
-    """One interaction cycle with LLM-selected tools and approval gating."""
+    """One interaction cycle with LLM-selected tools, real/simulator runner, and approval gating."""
     SessionLocal = init_db(db_path)
     with SessionLocal() as session:
         store.ensure_project(session, project_id)
@@ -269,6 +289,23 @@ def run_cycle(
         run_key = f"run_{cycle:03d}_{int(time.time())}_{uuid.uuid4().hex[:6]}"
         hypothesis = exp.hypothesis or state.current_hypothesis
 
+        # Retrieve prior supervisor feedback / steering guidance
+        prior_decision = (
+            session.query(Decision)
+            .filter_by(project_id=project_id)
+            .order_by(Decision.id.desc())
+            .first()
+        )
+        supervisor_feedback: dict[str, Any] | None = None
+        if prior_decision and prior_decision.supervisor_confirmed is not None:
+            supervisor_feedback = {
+                "confirmed": prior_decision.supervisor_confirmed,
+                "comment": prior_decision.supervisor_comment or "",
+                "prior_action": prior_decision.decision_type,
+            }
+            if not prior_decision.supervisor_confirmed and prior_decision.supervisor_comment:
+                hypothesis = f"{hypothesis} [Supervisor Guidance: {prior_decision.supervisor_comment}]"
+
         # --- Minimum tools always: write task + inspect ---
         task_path = tools.write_next_task(
             hypothesis=hypothesis,
@@ -323,10 +360,22 @@ def run_cycle(
             )
             return fail_payload
 
-        sim = simulate_from_task(
-            force_status=force_sim_status,
-            plant_untrusted=plant_untrusted,
-        )
+        if runner_mode == "real":
+            runner_result = local_runner.execute_training_job(run_key, task_path)
+            store.log_action(
+                session,
+                project_id=project_id,
+                event_type="subprocess_execution",
+                tool_name="execute_training_job",
+                input_data={"run_id": run_key, "task_path": str(task_path)},
+                output_data=runner_result,
+            )
+            sim = {"status": "real_execution", "runner_result": runner_result}
+        else:
+            sim = simulate_from_task(
+                force_status=force_sim_status,
+                plant_untrusted=plant_untrusted,
+            )
         folder = tools.inspect_run(run_key)
         store.log_action(
             session,
@@ -352,10 +401,22 @@ def run_cycle(
             "untrusted_instruction_detected": folder.get("untrusted_instruction_detected"),
             "sim_status": sim.get("status"),
             "csv_parsed": False,
+            "supervisor_feedback": supervisor_feedback,
         }
 
         # LLM (or fallback) chooses follow-up tools + provisional action
-        plan = decide_next_action(partial_evidence, facts if use_memory else {})
+        plan = decide_next_action(
+            partial_evidence,
+            facts if use_memory else {},
+            deterministic=deterministic,
+        )
+        selected = set(plan.get("tools_to_use") or [])
+        # Result files are authoritative evidence. When the folder is complete,
+        # always parse and compare them before accepting a model action.
+        if not folder.get("missing") and not folder.get("untrusted_instruction_detected"):
+            selected.update({"read_run_csv", "compare_to_baseline"})
+            plan["tools_to_use"] = list(dict.fromkeys([*plan.get("tools_to_use", []), "read_run_csv", "compare_to_baseline"]))
+
         store.log_action(
             session,
             project_id=project_id,
@@ -369,7 +430,6 @@ def run_cycle(
             output_data=plan,
         )
 
-        selected = set(plan.get("tools_to_use") or [])
         required_metric = _metric_from_facts(facts)
         parsed: dict[str, Any] = {
             "ok": False,
@@ -415,6 +475,21 @@ def run_cycle(
                 input_data={"selected": True},
             )
 
+        log_diagnostics: dict[str, Any] = {}
+        log_file = PROJECT_ROOT / "experiments" / run_key / "train.log"
+        if "read_run_logs" in selected or (log_file.exists() and (folder.get("missing") or not parsed.get("ok"))):
+            log_diagnostics = tools.read_run_logs(run_key)
+            store.log_action(
+                session,
+                project_id=project_id,
+                event_type="tool_call",
+                tool_name="read_run_logs",
+                input_data={"run_id": run_key},
+                output_data=log_diagnostics,
+            )
+            if "read_run_logs" not in tools_executed:
+                tools_executed.append("read_run_logs")
+
         full_evidence = {
             "run_id": run_key,
             "cycle": cycle,
@@ -433,27 +508,43 @@ def run_cycle(
             "untrusted_instruction_detected": folder.get("untrusted_instruction_detected")
             or parsed.get("untrusted_instruction_detected"),
             "sim_status": sim.get("status"),
-            "csv_parsed": "read_run_csv" in tools_executed,
+            "csv_parsed": bool(parsed.get("ok")),
+            "supervisor_feedback": supervisor_feedback,
+            "log_diagnostics": log_diagnostics,
         }
 
-        # Final action from full evidence + guards (keeps LLM tool plan)
-        safe = _deterministic_decide(full_evidence, facts if use_memory else {})
-        decision = enforce_deterministic_guards(plan, full_evidence, facts if use_memory else {})
-        decision["action"] = safe["action"]
-        decision["params_updates"] = safe.get("params_updates") or plan.get("params_updates") or {}
-        decision["tools_to_use"] = plan.get("tools_to_use") or safe.get("tools_to_use")
+        # Final action evaluation:
+        # If follow-up tools (CSV reading / comparison) were executed, evaluate full evidence.
+        # Otherwise, the initial plan already evaluated the full available evidence.
+        if len(tools_executed) > 2:
+            proposal = decide_next_action(
+                full_evidence,
+                facts if use_memory else {},
+                deterministic=deterministic,
+            )
+        else:
+            proposal = plan
+
+        # Assertive Guard Invariants: verifies safety and integrity contracts without blanket overwrite
+        decision = enforce_deterministic_guards(proposal, full_evidence, facts if use_memory else {})
+        decision["tools_to_use"] = plan.get("tools_to_use") or decision.get("tools_to_use")
         decision["tools_executed"] = tools_executed
-        decision["rationale"] = safe.get("rationale") or decision.get("rationale")
-        decision["llm_used"] = plan.get("llm_used", False)
-        decision["latency_ms"] = plan.get("latency_ms")
-        decision["model"] = plan.get("model")
+        decision["llm_used"] = proposal.get("llm_used", False)
+        decision["latency_ms"] = proposal.get("latency_ms")
+        decision["model"] = proposal.get("model")
+        decision["llm_proposed"] = {
+            "action": proposal.get("action"),
+            "rationale": proposal.get("rationale"),
+            "tools_to_use": plan.get("tools_to_use") or [],
+            "params_updates": proposal.get("params_updates") or {},
+        }
 
         store.log_action(
             session,
             project_id=project_id,
             event_type="llm_decision",
             tool_name="finalize_action",
-            input_data={"tools_executed": tools_executed},
+            input_data={"tools_executed": tools_executed, "plan_action": plan.get("action")},
             output_data=decision,
         )
 
@@ -471,6 +562,8 @@ def run_cycle(
         state.run_comparison = comparison
         state.last_failure_reason = decision.get("rationale")
         state.last_decision = decision.get("action")
+        if supervisor_feedback:
+            state.messages.append(f"[supervisor_feedback] confirmed={supervisor_feedback['confirmed']} comment='{supervisor_feedback['comment']}'")
         state.messages.append(f"[tools_selected] {decision.get('tools_to_use')}")
         state.messages.append(f"[tools_executed] {tools_executed}")
         state.messages.append(f"[decision] {decision.get('action')}: {decision.get('rationale')}")
@@ -626,6 +719,7 @@ def approve_decision(
     *,
     approved: bool,
     comment: str = "",
+    override_params: dict[str, Any] | None = None,
     db_path=None,
 ) -> dict[str, Any]:
     SessionLocal = init_db(db_path)
@@ -648,42 +742,71 @@ def approve_decision(
             .first()
         )
         promoted: dict[str, Any] = {}
+        overrides_applied: dict[str, Any] = {}
         if exp is not None:
             exp.status = "approved_continue" if approved else "needs_review"
             if approved:
                 pending_params = json.loads(decision.next_params_json or "{}")
+                if override_params:
+                    for k, v in override_params.items():
+                        if v is not None and v != "":
+                            pending_params[k] = v
+                            overrides_applied[k] = v
+                    decision.next_params_json = json.dumps(pending_params)
+                    exp.params_json = json.dumps(pending_params)
+
+                source_ref = (
+                    f"approve_decision:{decision.id}:override"
+                    if overrides_applied
+                    else f"approve_decision:{decision.id}"
+                )
                 # Promote only supervisor-approved long-term facts
                 if "learning_rate" in pending_params:
                     store.set_fact(
                         session,
                         project_id=project_id,
                         fact_key="learning_rate",
-                        value=pending_params["learning_rate"],
+                        value=float(pending_params["learning_rate"]),
                         approved_by="supervisor",
-                        source_ref=f"approve_decision:{decision.id}",
+                        source_ref=source_ref,
                     )
-                    promoted["learning_rate"] = pending_params["learning_rate"]
+                    promoted["learning_rate"] = float(pending_params["learning_rate"])
                 if "metric_name" in pending_params:
                     store.set_fact(
                         session,
                         project_id=project_id,
                         fact_key="approved_metric",
-                        value=pending_params["metric_name"],
+                        value=str(pending_params["metric_name"]),
                         approved_by="supervisor",
-                        source_ref=f"approve_decision:{decision.id}",
+                        source_ref=source_ref,
                     )
-                    promoted["approved_metric"] = pending_params["metric_name"]
+                    promoted["approved_metric"] = str(pending_params["metric_name"])
+            else:
+                if comment:
+                    overrides_applied["rejection_guidance"] = comment
         session.commit()
         store.log_action(
             session,
             project_id=project_id,
             event_type="supervisor_approval",
             tool_name="approve_decision",
-            input_data={"approved": approved, "comment": comment, "promoted": promoted},
+            input_data={
+                "approved": approved,
+                "comment": comment,
+                "override_params": override_params or {},
+                "promoted": promoted,
+            },
+            output_data={
+                "decision_id": decision.id,
+                "approved": approved,
+                "promoted": promoted,
+                "overrides_applied": overrides_applied,
+            },
             outcome="ok",
         )
         return {
             "decision_id": decision.id,
             "approved": approved,
             "promoted_facts": promoted,
+            "overrides_applied": overrides_applied,
         }
