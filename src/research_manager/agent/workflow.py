@@ -810,3 +810,51 @@ def approve_decision(
             "promoted_facts": promoted,
             "overrides_applied": overrides_applied,
         }
+
+
+def search_literature(query: str, max_results: int = 5) -> list[dict[str, Any]]:
+    """Search ArXiv scientific literature for prior art and baseline benchmarks."""
+    return tools.search_arxiv(query, max_results=max_results)
+
+
+def generate_paper_draft(
+    project_id: str,
+    query: str | None = None,
+    db_path=None,
+) -> dict[str, Any]:
+    """Compile an academic preprint manuscript from project runs, facts, and literature."""
+    SessionLocal = init_db(db_path)
+    with SessionLocal() as session:
+        store.ensure_project(session, project_id)
+        facts = store.get_current_facts(session, project_id)
+        experiments = [
+            {
+                "id": e.id,
+                "name": e.name,
+                "hypothesis": e.hypothesis,
+                "params": json.loads(e.params_json or "{}"),
+            }
+            for e in store.list_project_experiments(session, project_id)
+        ]
+        runs = [
+            {
+                "id": r.id,
+                "run_key": r.run_key,
+                "metrics": json.loads(r.metrics_json or "{}"),
+                "success": r.success,
+                "notes": r.notes,
+            }
+            for r in store.list_project_runs(session, project_id)
+        ]
+        decisions = [
+            {"decision_type": d.decision_type, "rationale": d.rationale}
+            for d in session.query(Decision).filter_by(project_id=project_id).all()
+        ]
+        return tools.draft_research_paper(
+            project_id=project_id,
+            facts=facts,
+            experiments=experiments,
+            runs=runs,
+            decisions=decisions,
+            query=query,
+        )

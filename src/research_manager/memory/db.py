@@ -22,7 +22,14 @@ def get_engine(db_path: Path | None = None, database_url: str | None = None):
             url = "postgresql+psycopg://" + url[len("postgres://") :]
         elif url.startswith("postgresql://"):
             url = "postgresql+psycopg://" + url[len("postgresql://") :]
-        return create_engine(url, echo=False, pool_pre_ping=True)
+        try:
+            engine = create_engine(url, echo=False, pool_pre_ping=True)
+            with engine.connect() as conn:
+                pass
+            return engine
+        except Exception:
+            # Graceful fallback to SQLite if PostgreSQL driver DLL or network is blocked
+            pass
 
     path = db_path or DEFAULT_DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)

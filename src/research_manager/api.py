@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from research_manager import tools
 from research_manager.agent import workflow
 from research_manager.memory.db import init_db
 from research_manager.memory import store
@@ -98,6 +99,11 @@ class DemoRequest(BaseModel):
     max_cycles: int = Field(default=3, ge=1, le=10)
 
 
+class PaperRequest(BaseModel):
+    project_id: str = "demo"
+    query: str | None = None
+
+
 def _snapshot(project_id: str) -> dict[str, Any]:
     SessionLocal = init_db()
     with SessionLocal() as session:
@@ -140,6 +146,23 @@ def _snapshot(project_id: str) -> dict[str, Any]:
         current_params = json.loads(latest.params_json) if latest and latest.params_json else {}
         pending_params = _pending_vs_facts(current_params, facts)
 
+        runs_list = [
+            {
+                "id": r.id,
+                "experiment_id": r.experiment_id,
+                "run_key": r.run_key,
+                "metrics": json.loads(r.metrics_json or "{}"),
+                "success": r.success,
+                "notes": r.notes,
+                "artifacts_path": r.artifacts_path,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in runs
+        ]
+        base_acc = float(facts.get("baseline_accuracy") or 0.75)
+        trajectory = tools.build_trajectory(runs_list, baseline=base_acc)
+        svg_chart = tools.generate_svg_chart(trajectory, baseline=base_acc)
+
         return {
             "project_id": project_id,
             "current": {
@@ -171,19 +194,9 @@ def _snapshot(project_id: str) -> dict[str, Any]:
                 }
                 for e in experiments
             ],
-            "runs": [
-                {
-                    "id": r.id,
-                    "experiment_id": r.experiment_id,
-                    "run_key": r.run_key,
-                    "metrics": json.loads(r.metrics_json or "{}"),
-                    "success": r.success,
-                    "notes": r.notes,
-                    "artifacts_path": r.artifacts_path,
-                    "created_at": r.created_at.isoformat() if r.created_at else None,
-                }
-                for r in runs
-            ],
+            "runs": runs_list,
+            "trajectory": trajectory,
+            "svg_chart": svg_chart,
             "decisions": [
                 {
                     "id": d.id,
@@ -643,6 +656,52 @@ def correct(body: CorrectRequest, _: None = Depends(require_api_key)) -> dict[st
         approved_by=body.approved_by,
     )
     return {"ok": True, "result": result, "snapshot": _snapshot(body.project_id)}
+
+
+@app.get("/api/literature")
+def get_literature(
+    query: str = Query(default="machine learning optimization"),
+    max_results: int = Query(default=5),
+    _: None = Depends(require_api_key),
+) -> dict[str, Any]:
+    papers = workflow.search_literature(query, max_results=max_results)
+    return {"query": query, "count": len(papers), "papers": papers}
+
+
+@app.post("/api/paper")
+def create_paper_draft(body: PaperRequest, _: None = Depends(require_api_key)) -> dict[str, Any]:
+    try:
+        result = workflow.generate_paper_draft(body.project_id, query=body.query)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "draft": result, "snapshot": _snapshot(body.project_id)}
+
+
+@app.get("/api/paper")
+def get_paper_draft(
+    project_id: str = Query(default="demo"),
+    _: None = Depends(require_api_key),
+) -> dict[str, Any]:
+    report_file = Path("reports") / f"{project_id}_preprint_paper.md"
+    bib_file = Path("reports") / f"{project_id}_references.bib"
+    tex_file = Path("reports") / f"{project_id}_manuscript.tex"
+    if not report_file.exists():
+        return {
+            "exists": False,
+            "project_id": project_id,
+            "content": None,
+            "bibtex": None,
+            "latex": None,
+            "message": "Paper preprint has not been drafted yet.",
+        }
+    return {
+        "exists": True,
+        "project_id": project_id,
+        "content": report_file.read_text(encoding="utf-8"),
+        "bibtex": bib_file.read_text(encoding="utf-8") if bib_file.exists() else None,
+        "latex": tex_file.read_text(encoding="utf-8") if tex_file.exists() else None,
+        "file_path": str(report_file),
+    }
 
 
 def main() -> None:

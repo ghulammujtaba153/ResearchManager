@@ -173,7 +173,7 @@
     ]
   },
   "representative_run": {
-    "wall_clock_ms": 150.6,
+    "wall_clock_ms": 196.7,
     "decision_latency_ms": 0.0,
     "model_calls": 0,
     "model": "deterministic",

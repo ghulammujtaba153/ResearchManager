@@ -258,6 +258,7 @@ def _gemini_decide(evidence: dict[str, Any], memory_facts: dict[str, Any]) -> di
         model=model_name,
         google_api_key=os.getenv("GEMINI_API_KEY"),
         temperature=0,
+        request_timeout=10,
     )
     system = (
         "You are the Results Analyst + Planner for an autonomous research experiment manager.\n"

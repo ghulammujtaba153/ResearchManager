@@ -124,6 +124,49 @@ export type AgentSnapshot = {
   decisions: DecisionRecord[]
   evidence: EvidenceItem[]
   action_log?: ActionLogItem[]
+  trajectory?: TrajectoryPoint[]
+  svg_chart?: string
+}
+
+export type TrajectoryPoint = {
+  cycle: number
+  run_key: string
+  accuracy: number | null
+  loss: number | null
+  baseline: number
+  beats_baseline: boolean
+  success: boolean
+  notes: string
+}
+
+export type LiteraturePaper = {
+  title: string
+  authors: string[]
+  published: string
+  summary: string
+  link: string
+  arxiv_id: string
+  bibtex: string
+}
+
+export type PaperDraftResponse = {
+  ok: boolean
+  draft: {
+    project_id: string
+    report_path: string
+    bibtex_path: string
+    tex_path?: string
+    latex_path?: string
+    total_runs: number
+    baseline: number
+    best_accuracy: number
+    best_loss: number
+    stats: Record<string, number>
+    paper_markdown: string
+    bibtex: string
+    latex?: string
+  }
+  snapshot: AgentSnapshot
 }
 
 export type StoreSnapshot = {

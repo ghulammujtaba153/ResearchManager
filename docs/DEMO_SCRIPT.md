@@ -14,7 +14,11 @@ Click these in order. Name the table/file when you talk.
    - **Conflicting CSV** (no invented metrics).
    - **Tool-failure + retry** (`cycle_result` idempotency).
    - **Memory off vs on** (different baseline).
-8. **Action log + Fact history** tabs — timestamps, `finalize_action`, `tools_executed`. Cite eval **10/10** in `evaluation/scenario_results.md`.
+8. **Scientific Grounding & Preprint Tabs**:
+   - **Trajectory tab** — vector SVG convergence chart against approved baseline with cycle statistics.
+   - **Literature tab** — live ArXiv query for related work and one-click BibTeX citation copying.
+   - **Paper draft tab** — autonomous preprint manuscript compiler generating `reports/{project_id}_preprint_paper.md` with abstract, methodology, results table, and bibliography.
+9. **Action log + Fact history** tabs — timestamps, `finalize_action`, `tools_executed`. Cite eval **10/10** in `evaluation/scenario_results.md`.
 
 **3-cycle demo** auto-approves between cycles if time is short.
 

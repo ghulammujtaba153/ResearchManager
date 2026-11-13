@@ -6,11 +6,14 @@ Agentic research assistant (assignment A02) that plans experiments, reads local 
 
 - **Tools:** `inspect_run`, `read_run_csv`, `read_run_logs` (diagnoses OOM, NaN loss, stack traces), `write_next_task`, deterministic `compare_to_baseline` — LLM `tools_to_use` selects which follow-up tools actually run
 - **Execution:** Dual mode — reproducible simulated artifact dropper (offline CI/eval) and live OS subprocess runner (`train_model.py`) with real gradient descent and `train.log` telemetry
+- **Assertive Invariants (P1):** Six formal safety contracts (`INV_SECURITY`, `INV_COMPLETENESS`, `INV_EVIDENCE_INTEGRITY`, `INV_BASELINE_THRESHOLD`, `INV_VOCABULARY`, `INV_PARAM_BOUNDS`) verify proposals while preserving agent exploration
+- **Collaborative Steering (P2):** Supervisors counter-propose hyperparameters (`--lr`, UI overrides) and reject with targeted feedback injected directly into agent context
+- **Scientific Literature & Paper Drafter:** ArXiv API integration (`search_arxiv`) with BibTeX citations, multi-run trajectory analytics (`generate_svg_chart`), and autonomous preprint manuscript drafting (`reports/{project_id}_preprint_paper.md`)
 - **LLM decision:** Gemini chooses tools + next action from evidence (`GEMINI_API_KEY`); deterministic fallback if offline; guards override unsafe actions
 - **3 cycles + restart:** checkpoints resume without re-uploading baselines (last 20 kept per project)
 - **Correction:** versioned facts (`fact_versions`); agent param tweaks promote only after supervisor approve
 - **Isolation:** all records keyed by `project_id`; immutable `review_policy` cannot be changed by untrusted content
-- **UI/CLI:** state, next action, evidence, approval gate banner, fact history, LLM tool chips, action log
+- **UI/CLI:** full web workspace with Trajectory SVG plot, ArXiv literature search, Preprint Manuscript generator, approval gate banner, and store viewer
 - **Reliability:** action log + `cycle_result` idempotency for mid-cycle failure retries; quiet UI checkpoint reads
 - **Evaluation:** `evaluation/run_scenarios.py` — **10/10** scenarios, memory **3/3**, claims **5/5**
 
@@ -44,7 +47,11 @@ CLI:
 
 ```powershell
 python -m research_manager onboard --project-id demo
-python -m research_manager cycle --project-id demo
+python -m research_manager cycle --project-id demo             # simulated run
+python -m research_manager cycle --project-id demo --real      # real ML gradient descent training
+python -m research_manager approve --project-id demo --comment "Proceed with LR tune" --lr 0.05
+python -m research_manager literature --query "warm restarts" --limit 3
+python -m research_manager paper --project-id demo --query "SGDR"
 python -m research_manager resume --project-id demo
 python -m research_manager demo --project-id demo
 ```

@@ -40,6 +40,7 @@ def execute_training_job(
     log_file = run_dir / "train.log"
 
     env = os.environ.copy()
+    env["MLFLOW_DISABLE_AGENT_HINT"] = "1"
     src_dir = str(PROJECT_ROOT / "src")
     existing_py_path = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = f"{src_dir};{existing_py_path}" if existing_py_path else src_dir

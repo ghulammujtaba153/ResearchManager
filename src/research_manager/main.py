@@ -81,6 +81,28 @@ def approve(
     typer.echo(json.dumps(result, indent=2))
 
 
+@app.command()
+def literature(
+    query: str = typer.Option("machine learning optimization", "--query", "-q", help="Literature search query"),
+    limit: int = typer.Option(5, "--limit", "-n", help="Max search results"),
+) -> None:
+    """Search ArXiv scientific literature for prior art and baseline benchmarks."""
+    papers = workflow.search_literature(query, max_results=limit)
+    typer.echo(json.dumps(papers, indent=2))
+
+
+@app.command()
+def paper(
+    project_id: str = "demo",
+    query: str | None = typer.Option(None, "--query", "-q", help="Topic query for literature context"),
+) -> None:
+    """Draft an academic preprint manuscript from project runs and scientific grounding."""
+    draft = workflow.generate_paper_draft(project_id, query=query)
+    typer.echo(f"Draft written to: {draft.get('report_path')}")
+    typer.echo(f"BibTeX written to: {draft.get('bibtex_path')}")
+    typer.echo(f"Total runs analyzed: {draft.get('total_runs')}, Baseline: {draft.get('baseline')}")
+
+
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:

@@ -85,6 +85,9 @@ Deterministic code validates numbers, redacts untrusted markers, and performs st
 | `read_run_logs` | Diagnostics & telemetry | Analyzes `train.log` stdout/stderr; detects OOM, NaN loss, or crash traces |
 | `write_next_task` | Persistent controlled write | Writes next experiment task YAML |
 | `compare_to_baseline` | Deterministic calc | Delta vs approved baseline (not LLM math) |
+| `search_arxiv` | Scientific grounding | Queries ArXiv API for peer-reviewed baselines and generates BibTeX entries |
+| `build_trajectory` & `generate_svg_chart` | Scientific analysis | Multi-run descriptive statistics and vector SVG convergence plotting |
+| `draft_research_paper` | Autonomous preprint engine | Synthesizes project runs, baseline facts, and literature into preprint manuscript in `reports/` |
 
 Splitting wrappers of the same operation was avoided; each tool has a distinct side effect or evidence type.
 
@@ -191,7 +194,9 @@ See generated `evaluation/scenario_results.json` fields:
 | Single coordinator | Shared project memory; fewer conflicting agent copies |
 | Idempotent retries + early `cycle_result` | Safe retry even when failure happens before a Run row exists |
 | Separate supervisor fields + approve gate | Human judgment required before the next cycle; facts promote on approve |
+| Collaborative steering & counter-proposals | Supervisors can override agent hyperparameter proposals or reject with structured feedback |
 | Assertive guard invariants | LLM autonomously chooses tools and actions; invariant guards veto only when safety or truthfulness contracts are violated |
+| Scientific grounding & preprint drafting | Experiments are grounded in ArXiv literature; multi-cycle runs compile into reproducible academic manuscripts with BibTeX |
 | Gemini + fallback | Meets LLM requirement while keeping offline eval stable |
 
 ### Disclosure

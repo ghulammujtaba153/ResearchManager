@@ -101,3 +101,28 @@ export function correctFact(payload: {
     body: JSON.stringify(payload),
   })
 }
+
+export function searchLiterature(query = 'machine learning optimization', limit = 5) {
+  return request<{ query: string; count: number; papers: import('./types').LiteraturePaper[] }>(
+    `/api/literature?query=${encodeURIComponent(query)}&max_results=${limit}`
+  )
+}
+
+export function generatePaperDraft(projectId = 'demo', query?: string) {
+  return request<import('./types').PaperDraftResponse>('/api/paper', {
+    method: 'POST',
+    body: JSON.stringify({ project_id: projectId, query }),
+  })
+}
+
+export function fetchPaperDraft(projectId = 'demo') {
+  return request<{
+    exists: boolean
+    project_id: string
+    content: string | null
+    bibtex: string | null
+    latex?: string | null
+    file_path?: string
+    message?: string
+  }>(`/api/paper?project_id=${encodeURIComponent(projectId)}`)
+}

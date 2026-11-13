@@ -10,6 +10,13 @@ import pandas as pd
 import yaml
 
 from research_manager.tools.diagnostics import read_run_logs
+from research_manager.tools.literature import search_arxiv
+from research_manager.tools.paper_drafter import draft_research_paper
+from research_manager.tools.science import (
+    build_trajectory,
+    compute_statistics,
+    generate_svg_chart,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 EXPERIMENTS_DIR = PROJECT_ROOT / "experiments"

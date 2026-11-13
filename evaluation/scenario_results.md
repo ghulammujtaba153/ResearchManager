@@ -31,7 +31,7 @@ Successes: **3/3**
 | Conflicting CSV does not invent a numeric accuracy metric | PASS | {} |
 
 ## Representative run
-- Wall clock: 150.6 ms
+- Wall clock: 196.7 ms
 - Decision latency: 0.0 ms
 - Model calls: 0 (deterministic)
 - Approx cost: 0.0
